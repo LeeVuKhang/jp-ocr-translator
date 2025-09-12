@@ -8,9 +8,10 @@ from docx import Document
 import PyPDF2
 from PIL import Image
 import pytesseract
+import pandas as pd
 
 load_dotenv() 
-
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 st.set_page_config(page_title="AI dịch tiếng Nhật", page_icon="🤖", layout = "centered")
 
 st.title("🤖 AI dịch tiếng Nhật")
@@ -36,10 +37,11 @@ def read_file(uploaded_file):
         text = "\n".join([p.text for p in doc.paragraphs])
     elif uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        text = "\n".join([page.extract_text() for page in pdf_reader.pages])
+        text = "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
     elif uploaded_file.type in ["image/png", "image/jpeg"]:
         image = Image.open(uploaded_file)
-        text = pytesseract.image_to_string(image, lang="jpn")  # OCR tiếng Nhật
+        st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)  
+        text = pytesseract.image_to_string(image, lang="jpn")  
     return text
 
 if uploaded_file is not None:
@@ -50,9 +52,31 @@ if uploaded_file is not None:
     if st.button("Dịch sang Tiếng Việt"):
         response = model.invoke([
             HumanMessage(
-                content=f"Dịch đoạn văn bản tiếng Nhật sau sang tiếng Việt, kèm chú thích học tiếng Nhật (Kanji - Hiragana - Nghĩa):\n\n{japanese_text}",
+                content=f"Dịch đoạn văn bản tiếng Nhật sau sang tiếng Việt. "
+                        f"Trình bày chú thích theo bảng 3 cột: Kanji | Hiragana | Nghĩa.\n\n{japanese_text}",
                 additional_kwargs={"job_role": "Japanese language teacher"}  
             )
         ])
+        
         st.subheader("📖 Bản dịch & Chú thích")
-        st.write(response.content)
+        result_text = response.content
+        st.write(result_text)
+
+        try:
+            df = pd.read_csv(io.StringIO(result_text), sep="|").dropna(axis=1, how="all")
+            st.dataframe(df, use_container_width=True)
+        except Exception:
+            st.info("👉 Không phân tích được bảng, hiển thị dạng text.")
+
+        with io.BytesIO() as buffer:
+            doc = Document()
+            doc.add_heading("Bản dịch & Chú thích", level=1)
+            doc.add_paragraph(result_text)
+            doc.save(buffer)
+            buffer.seek(0)
+            st.download_button(
+                label="⬇️ Tải kết quả (.docx)",
+                data=buffer,
+                file_name="ket_qua_dich.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
