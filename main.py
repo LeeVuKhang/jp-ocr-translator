@@ -9,6 +9,9 @@ import PyPDF2
 from PIL import Image
 import pytesseract
 import pandas as pd
+from st_img_pastebutton import paste
+import base64
+
 
 load_dotenv() 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -28,31 +31,59 @@ uploaded_file = st.file_uploader(
     type=["txt", "docx", "pdf", "png", "jpg", "jpeg"]
 )
 
-def read_file(uploaded_file):
+pasted_file = paste(label="📋 Click here, then paste nội dung/ảnh", key="pastebox")
+
+
+def read_file(file_input):
     text = ""
-    if uploaded_file.type == "text/plain":
-        text = uploaded_file.read().decode("utf-8")
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = Document(uploaded_file)
-        text = "\n".join([p.text for p in doc.paragraphs])
-    elif uploaded_file.type == "application/pdf":
-        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        text = "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
-    elif uploaded_file.type in ["image/png", "image/jpeg"]:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)  
-        text = pytesseract.image_to_string(image, lang="jpn")  
+
+    # Nếu là UploadedFile (file upload)
+    if hasattr(file_input, "type"):
+        if file_input.type == "text/plain":
+            text = file_input.read().decode("utf-8")
+        elif file_input.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = Document(file_input)
+            text = "\n".join([p.text for p in doc.paragraphs])
+        elif file_input.type == "application/pdf":
+            pdf_reader = PyPDF2.PdfReader(file_input)
+            text = "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
+        elif file_input.type in ["image/png", "image/jpeg"]:
+            image = Image.open(file_input)
+            st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)
+            text = pytesseract.image_to_string(image, lang="jpn")
+
+    # Nếu là ảnh từ paste() trả về base64 string
+    elif isinstance(file_input, str):
+        header, encoded = file_input.split(",", 1)
+        binary_data = base64.b64decode(encoded)
+        image = Image.open(io.BytesIO(binary_data)).convert("RGB")
+        st.image(image, caption="📷 Ảnh đã dán", use_container_width=True)
+        text = pytesseract.image_to_string(image, lang="jpn")
+
+    # Nếu là ảnh PIL Image trực tiếp
+    elif isinstance(file_input, Image.Image):
+        st.image(file_input, caption="📷 Ảnh đã dán", use_container_width=True)
+        text = pytesseract.image_to_string(file_input, lang="jpn")
+
+    else:
+        st.warning("❌ Không nhận dạng được file/ảnh.")
+
     return text
 
-if uploaded_file is not None:
-    japanese_text = read_file(uploaded_file)
+
+if uploaded_file is not None or pasted_file is not None:
+    if uploaded_file is not None:
+        japanese_text = read_file(uploaded_file)
+    else:
+        japanese_text = read_file(pasted_file)
+
     st.subheader("📄 Văn bản gốc (tiếng Nhật OCR/Text)")
     st.text_area("Nội dung", japanese_text, height=200)
 
     if st.button("Dịch sang Tiếng Việt"):
         response = model.invoke([
             HumanMessage(
-                content=f"Dịch đoạn văn bản tiếng Nhật sau sang tiếng Việt. "
+                content=f"Dịch đoạn văn bản tiếng Nhật sau sang tiếng Việt."
                         f"Trình bày chú thích theo bảng 3 cột: Kanji | Hiragana | Nghĩa.\n\n{japanese_text}",
                 additional_kwargs={"job_role": "Japanese language teacher"}  
             )
