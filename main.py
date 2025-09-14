@@ -14,7 +14,9 @@ import base64
 
 
 load_dotenv() 
+
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+custom_oem_psm_config = r'--oem 3 --psm 5'
 st.set_page_config(page_title="AI dịch tiếng Nhật", page_icon="🤖", layout = "centered")
 
 st.title("🤖 AI dịch tiếng Nhật")
@@ -50,7 +52,7 @@ def read_file(file_input):
         elif file_input.type in ["image/png", "image/jpeg"]:
             image = Image.open(file_input)
             st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)
-            text = pytesseract.image_to_string(image, lang="jpn")
+            text = pytesseract.image_to_string(image, lang="jpn_vert", config=custom_oem_psm_config)
 
     # Nếu là ảnh từ paste() trả về base64 string
     elif isinstance(file_input, str):
@@ -58,7 +60,7 @@ def read_file(file_input):
         binary_data = base64.b64decode(encoded)
         image = Image.open(io.BytesIO(binary_data)).convert("RGB")
         st.image(image, caption="📷 Ảnh đã dán", use_container_width=True)
-        text = pytesseract.image_to_string(image, lang="jpn")
+        text = pytesseract.image_to_string(image, lang="jpn_vert", config=custom_oem_psm_config)
 
     # Nếu là ảnh PIL Image trực tiếp
     elif isinstance(file_input, Image.Image):
@@ -82,12 +84,21 @@ if uploaded_file is not None or pasted_file is not None:
 
     if st.button("Dịch sang Tiếng Việt"):
         response = model.invoke([
-            HumanMessage(
-                content=f"Dịch đoạn văn bản tiếng Nhật sau sang tiếng Việt."
-                        f"Trình bày chú thích theo bảng 3 cột: Kanji | Hiragana | Nghĩa.\n\n{japanese_text}",
-                additional_kwargs={"job_role": "Japanese language teacher"}  
-            )
-        ])
+    HumanMessage(
+        content=(
+            "You are an experienced Japanese language teacher. "
+            "The student has a JLPT N4 level. Please translate the following Japanese text into Vietnamese "
+            "**accurately and fluently**.\n\n"
+            "**Output format:**\n"
+            "1. First, provide the full Vietnamese translation of the paragraph.\n"
+            "2. Then present a table with three columns (Kanji | Hiragana | Vietnamese meaning) for the main vocabulary in the text.\n"
+            "3. After each translated sentence, include brief notes on any relevant grammar points or usage as needed.\n\n"
+            f"Text: {japanese_text}"
+        ),
+        additional_kwargs={"job_role": "Japanese language teacher"}
+    )
+])
+
         
         st.subheader("📖 Bản dịch & Chú thích")
         result_text = response.content
