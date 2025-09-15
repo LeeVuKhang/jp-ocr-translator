@@ -17,11 +17,23 @@ import cv2
 load_dotenv() 
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-custom_oem_psm_config = r'--oem 3 --psm 5'
 st.set_page_config(page_title="AI dịch tiếng Nhật", page_icon="🤖", layout = "centered")
+st.title("AI dịch")
+st.markdown("Ứng dụng dịch sử dụng mô hình ngôn ngữ lớn (LLM) và các công cụ tích hợp.")
 
-st.title("🤖 AI dịch tiếng Nhật")
-st.markdown("Ứng dụng dịch tiếng Nhật sử dụng mô hình ngôn ngữ lớn (LLM) và các công cụ tích hợp.")
+ocr_mode = st.selectbox(
+    "Chọn chế độ OCR",
+    options=["Dịch ngang (jpn)", "Dịch dọc (jpn_vert)"],
+    index=0
+)
+
+if "dọc" in ocr_mode.lower():
+    ocr_lang = "jpn_vert"
+    custom_oem_psm_config = r'--oem 3 --psm 5'
+else:
+    ocr_lang = "jpn"
+    custom_oem_psm_config = r'--oem 3 --psm 6'
+
 
 model = ChatGroq(
         groq_api_key=os.getenv("GROQ_API_KEY"),
@@ -50,7 +62,6 @@ pasted_file = paste(label="📋 Click here, then paste nội dung/ảnh", key="p
 def read_file(file_input):
     text = ""
 
-    # Nếu là UploadedFile (file upload)
     if hasattr(file_input, "type"):
         if file_input.type == "text/plain":
             text = file_input.read().decode("utf-8")
@@ -64,26 +75,25 @@ def read_file(file_input):
             image = Image.open(file_input)
             image = sharpen_image_pil(image)
             st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)
-            text = pytesseract.image_to_string(image, lang="jpn_vert", config=custom_oem_psm_config)
+            text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
 
-    # Nếu là ảnh từ paste() trả về base64 string
     elif isinstance(file_input, str):
         header, encoded = file_input.split(",", 1)
         binary_data = base64.b64decode(encoded)
         image = Image.open(io.BytesIO(binary_data)).convert("RGB")
         image = sharpen_image_pil(image)
         st.image(image, caption="📷 Ảnh đã dán", use_container_width=True)
-        text = pytesseract.image_to_string(image, lang="jpn_vert", config=custom_oem_psm_config)
+        text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
 
-    # Nếu là ảnh PIL Image trực tiếp
     elif isinstance(file_input, Image.Image):
         st.image(file_input, caption="📷 Ảnh đã dán", use_container_width=True)
-        text = pytesseract.image_to_string(file_input, lang="jpn")
+        text = pytesseract.image_to_string(file_input, lang=ocr_lang)
 
     else:
         st.warning("❌ Không nhận dạng được file/ảnh.")
 
     return text
+
 
 
 if uploaded_file is not None or pasted_file is not None:
