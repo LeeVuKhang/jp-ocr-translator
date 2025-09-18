@@ -13,9 +13,12 @@ import pandas as pd
 from st_img_pastebutton import paste
 import base64
 import cv2
+import re
+import unicodedata
+from manga_ocr import MangaOcr
 
 load_dotenv() 
-
+mocr = MangaOcr()
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 st.set_page_config(page_title="AI dịch tiếng Nhật", page_icon="🤖", layout = "centered")
 st.title("AI dịch")
@@ -56,6 +59,13 @@ def sharpen_image_pil(pil_img):
     sharpened_rgb = cv2.cvtColor(sharpened, cv2.COLOR_BGR2RGB)
     return Image.fromarray(sharpened_rgb)
 
+def normalize_japanese_text(text):
+    text = unicodedata.normalize("NFKC", text)
+    allowed = r"\u3040-\u30FF\u4E00-\u9FFF\u0020-\u007E\u3000-\u303F"
+    text = re.sub(rf"[^{allowed}]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
 pasted_file = paste(label="📋 Click here, then paste nội dung/ảnh", key="pastebox")
 
 
@@ -75,7 +85,8 @@ def read_file(file_input):
             image = Image.open(file_input)
             image = sharpen_image_pil(image)
             st.image(image, caption="📷 Ảnh đã tải lên", use_container_width=True)
-            text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
+            text = mocr(image)
+            # text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
 
     elif isinstance(file_input, str):
         header, encoded = file_input.split(",", 1)
@@ -83,11 +94,13 @@ def read_file(file_input):
         image = Image.open(io.BytesIO(binary_data)).convert("RGB")
         image = sharpen_image_pil(image)
         st.image(image, caption="📷 Ảnh đã dán", use_container_width=True)
-        text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
+        text = mocr(image)
+        # text = pytesseract.image_to_string(image, lang=ocr_lang, config=custom_oem_psm_config)
 
     elif isinstance(file_input, Image.Image):
         st.image(file_input, caption="📷 Ảnh đã dán", use_container_width=True)
-        text = pytesseract.image_to_string(file_input, lang=ocr_lang)
+        text = mocr(image)
+        # text = pytesseract.image_to_string(file_input, lang=ocr_lang)
 
     else:
         st.warning("❌ Không nhận dạng được file/ảnh.")
@@ -101,7 +114,7 @@ if uploaded_file is not None or pasted_file is not None:
         japanese_text = read_file(uploaded_file)
     else:
         japanese_text = read_file(pasted_file)
-
+    japanese_text = normalize_japanese_text(japanese_text)
     st.subheader("📄 Văn bản gốc (tiếng Nhật OCR/Text)")
     st.text_area("Nội dung", japanese_text, height=200)
 
